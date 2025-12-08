@@ -1,0 +1,7 @@
+{
+  "name": "SmartDorm AIoT Platform",
+  "description": "A comprehensive AIoT dormitory management system for blue-collar workforce accommodation, featuring smart access, utility management, and security analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
