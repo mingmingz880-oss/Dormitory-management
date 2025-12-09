@@ -4,7 +4,7 @@ import { Role, BedStatus, OperationLog, RentStatus, Room, Tenant, TenantStatus, 
 import { MOCK_ROOMS, MOCK_TENANTS, MOCK_TRANSFER_REQUESTS, MOCK_CHECKOUT_REQUESTS } from './constants';
 import Layout from './components/Layout';
 import AdminDashboard from './components/AdminDashboard';
-import { DormManagement, ImportConfig } from './components/DormManagement';
+import { DormManagement } from './components/DormManagement';
 import UtilityControl from './components/UtilityControl';
 import ApprovalCenter from './components/ApprovalCenter';
 import MobileTenantApp from './components/MobileTenantApp';
@@ -45,7 +45,7 @@ const App: React.FC = () => {
   // Modal States
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [tenantToCheckout, setTenantToCheckout] = useState<Tenant | null>(null);
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(null); // Track which request triggered the modal
+  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
 
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [tenantToTransfer, setTenantToTransfer] = useState<Tenant | null>(null);
@@ -56,7 +56,7 @@ const App: React.FC = () => {
       const tenant = tenants.find(t => t.id === tenantId);
       if (tenant) {
           setTenantToCheckout(tenant);
-          setActiveRequestId(null); // Manual checkout
+          setActiveRequestId(null);
           setCheckoutModalOpen(true);
       }
   };
@@ -65,17 +65,16 @@ const App: React.FC = () => {
       const tenant = tenants.find(t => t.id === tenantId);
       if (tenant) {
           setTenantToTransfer(tenant);
-          setActiveRequestId(null); // Manual transfer
+          setActiveRequestId(null);
           setTransferModalOpen(true);
       }
   };
 
-  // Approval Handlers
   const handleApproveTransfer = (requestId: string, tenantId: string) => {
       const tenant = tenants.find(t => t.id === tenantId);
       if (tenant) {
           setTenantToTransfer(tenant);
-          setActiveRequestId(requestId); // Link to request
+          setActiveRequestId(requestId);
           setTransferModalOpen(true);
       }
   };
@@ -84,7 +83,7 @@ const App: React.FC = () => {
        const tenant = tenants.find(t => t.id === tenantId);
       if (tenant) {
           setTenantToCheckout(tenant);
-          setActiveRequestId(requestId); // Link to request
+          setActiveRequestId(requestId);
           setCheckoutModalOpen(true);
       }
   };
@@ -93,10 +92,8 @@ const App: React.FC = () => {
     const tenant = tenants.find(t => t.id === tenantId);
     if (!tenant) return;
 
-    // Remove tenant
     setTenants(prev => prev.filter(t => t.id !== tenantId));
     
-    // Free up bed
     setRooms(prev => prev.map(room => ({
         ...room,
         beds: room.beds.map(bed => 
@@ -106,13 +103,11 @@ const App: React.FC = () => {
         )
     })));
     
-    // Update Request Status if linked
     if (activeRequestId) {
         setCheckoutRequests(prev => prev.map(r => r.id === activeRequestId ? { ...r, status: 'PROCESSED' } : r));
         setActiveRequestId(null);
     }
 
-    // Add Log
     const newLog: OperationLog = {
         id: `log-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -123,7 +118,6 @@ const App: React.FC = () => {
     };
     setLogs(prev => [newLog, ...prev]);
 
-    // Close Modal
     setCheckoutModalOpen(false);
     setTenantToCheckout(null);
   };
@@ -135,14 +129,12 @@ const App: React.FC = () => {
       const oldRoomId = tenant.roomId;
       const oldBedId = tenant.bedId;
 
-      // Update Tenant Location
       setTenants(prev => prev.map(t => 
           t.id === tenantId 
           ? { ...t, roomId: newRoomId, bedId: newBedId }
           : t
       ));
 
-      // Update Rooms (Free old bed, occupy new bed)
       setRooms(prev => prev.map(room => {
           if (room.id === oldRoomId) {
               return {
@@ -163,13 +155,11 @@ const App: React.FC = () => {
           return room;
       }));
 
-       // Update Request Status if linked
       if (activeRequestId) {
           setTransferRequests(prev => prev.map(r => r.id === activeRequestId ? { ...r, status: 'APPROVED' } : r));
           setActiveRequestId(null);
       }
 
-      // Log
       const newLog: OperationLog = {
         id: `log-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -184,169 +174,43 @@ const App: React.FC = () => {
     setTenantToTransfer(null);
   };
 
-  const handleBatchImport = (config: ImportConfig) => {
-    // --- Step 1: Simulate Excel Import Parsing ---
-    // In real scenario, file is parsed here. We mock 50 records.
-    const importCount = 50;
-    const departments = ['制造一部', '物流部', '质检部'];
-    
-    // Generate mock candidates
-    const importedCandidates = Array.from({ length: importCount }).map((_, i) => {
-        const dept = departments[i % departments.length]; 
-        // Mock gender distribution
-        const gender = dept === '质检部' 
-            ? (Math.random() > 0.3 ? 'FEMALE' : 'MALE') 
-            : (Math.random() > 0.8 ? 'FEMALE' : 'MALE'); 
-            
-        return {
-            tempId: `import-${i}`,
-            name: `员工${i + 1}`,
-            phone: `138${Math.floor(10000000 + Math.random() * 90000000)}`,
-            idCard: `4403001990${Math.floor(1000 + Math.random() * 9000)}`,
-            gender: gender as 'MALE' | 'FEMALE',
-            company: '立讯精密',
-            department: dept
-        };
-    });
-
-    // --- Step 2: Apply Allocation Rules based on Config ---
-    
-    // Rule: Sort by Department (Clustering)
-    importedCandidates.sort((a, b) => a.department.localeCompare(b.department));
-
-    // Filter available rooms based on selected buildings from Config
-    // Sort naturally (A-201 before A-202)
-    const sortedRooms = [...rooms]
-        .filter(r => config.selectedBuildings.includes(r.building))
-        .sort((a, b) => {
-            if (a.building !== b.building) return a.building.localeCompare(b.building);
-            return a.number.localeCompare(b.number);
-        });
-
-    // Strategy: We iterate through candidates and try to find the "best next bed"
-    const successAllocations: Tenant[] = [];
-    const queueList: WaitlistEntry[] = [];
-    const newlyOccupiedBedIds = new Set<string>();
-
-    // Helper to check if a room is valid for a specific department (Strict Mode)
-    const isRoomValidForDept = (room: Room, dept: string): boolean => {
-        if (!config.strictDept) return true;
+  const handleBatchImport = (result: { newTenants: Tenant[], newWaitlist: WaitlistEntry[] }) => {
+    // 1. Update Tenants State
+    if (result.newTenants.length > 0) {
+        setTenants(prev => [...prev, ...result.newTenants]);
         
-        // Check existing tenants in this room
-        const tenantsInRoom = tenants.filter(t => t.roomId === room.id);
-        if (tenantsInRoom.some(t => !t.company.includes(dept))) return false; // Mixed dept detected
-
-        // Check newly assigned tenants in this batch
-        const newTenantsInRoom = successAllocations.filter(t => t.roomId === room.id);
-        if (newTenantsInRoom.some(t => !t.company.includes(dept))) return false;
-
-        return true;
-    };
-
-    importedCandidates.forEach(candidate => {
-        let assignedBed = null;
-        let assignedRoomId = null;
-
-        // Find first valid bed
-        for (const room of sortedRooms) {
-            // 1. Gender Check
-            if (room.gender !== candidate.gender) continue;
-            
-            // 2. Strict Dept Check
-            if (!isRoomValidForDept(room, candidate.department)) continue;
-
-            // 3. Find empty bed
-            const bed = room.beds.find(b => 
-                b.status === BedStatus.EMPTY && 
-                !newlyOccupiedBedIds.has(b.id) // Ensure we haven't just filled it in this loop
-            );
-
-            if (bed) {
-                assignedBed = bed;
-                assignedRoomId = room.id;
-                break; // Found a spot, stop searching
-            }
-        }
-
-        if (assignedBed && assignedRoomId) {
-            // Success
-            newlyOccupiedBedIds.add(assignedBed.id);
-            successAllocations.push({
-                id: `tenant-${candidate.tempId}`,
-                name: candidate.name,
-                phone: candidate.phone,
-                company: `${candidate.company}-${candidate.department}`,
-                faceRegistered: false,
-                roomId: assignedRoomId,
-                bedId: assignedBed.id,
-                status: TenantStatus.PENDING,
-                rentStatus: RentStatus.PAID,
-                rentDueDate: '2023-11-25',
-                lastAccess: new Date().toISOString()
-            });
-        } else {
-            // Waitlist
-            queueList.push({
-                id: `wait-${candidate.tempId}`,
-                name: candidate.name,
-                gender: candidate.gender,
-                company: `${candidate.company}-${candidate.department}`,
-                phone: candidate.phone,
-                queueDate: new Date().toISOString()
-            });
-        }
-    });
-
-    // --- Step 3: Update State ---
-    
-    if (successAllocations.length > 0) {
-        setTenants(prev => [...prev, ...successAllocations]);
+        // Update Room Bed Statuses
+        const newOccupiedBedIds = new Set(result.newTenants.map(t => t.bedId));
         setRooms(prev => prev.map(room => ({
             ...room,
             beds: room.beds.map(bed => 
-                newlyOccupiedBedIds.has(bed.id)
-                ? { ...bed, status: BedStatus.OCCUPIED, tenantId: successAllocations.find(t => t.bedId === bed.id)?.id }
+                newOccupiedBedIds.has(bed.id)
+                ? { ...bed, status: BedStatus.OCCUPIED, tenantId: result.newTenants.find(t => t.bedId === bed.id)?.id }
                 : bed
             )
         })));
     }
 
-    if (queueList.length > 0) {
-        setWaitlist(prev => [...prev, ...queueList]);
+    // 2. Update Waitlist
+    if (result.newWaitlist.length > 0) {
+        setWaitlist(prev => [...prev, ...result.newWaitlist]);
     }
 
-    // --- Step 4: Logs & Notification ---
-    
-    // Generate Summary
-    const deptSummary: Record<string, number> = {};
-    successAllocations.forEach(t => {
-        const dept = t.company.split('-')[1];
-        deptSummary[dept] = (deptSummary[dept] || 0) + 1;
-    });
-
-    const summaryText = Object.entries(deptSummary)
-        .map(([dept, count]) => `${dept}: ${count}人`)
-        .join('; ');
-
-    const logDetails = `
-        总数: ${importCount}。成功: ${successAllocations.length}。排队: ${queueList.length}。
-        规则: [${config.selectedBuildings.join(',')}] ${config.strictDept ? '严禁混住' : '允许混住'}。
-        分配: ${summaryText}。
-    `.trim();
-
+    // 3. Log
+    const logDetails = `导入 ${result.newTenants.length + result.newWaitlist.length} 人。成功安置 ${result.newTenants.length} 人，进入排队 ${result.newWaitlist.length} 人。`;
     const logEntry: OperationLog = {
         id: `log-${Date.now()}`,
         timestamp: new Date().toISOString(),
         operator: '管理员',
         action: '批量入住导入',
         details: logDetails,
-        status: queueList.length > 0 ? 'WARNING' : 'SUCCESS'
+        status: result.newWaitlist.length > 0 ? 'WARNING' : 'SUCCESS'
     };
     setLogs(prev => [logEntry, ...prev]);
 
-    alert(`批量导入完成！\n\n成功安置: ${successAllocations.length} 人\n进入排队: ${queueList.length} 人\n\n分配详情:\n${summaryText}`);
+    alert(`批量导入完成！\n\n成功安置: ${result.newTenants.length} 人\n进入排队: ${result.newWaitlist.length} 人`);
     
-    if (queueList.length > 0) {
+    if (result.newWaitlist.length > 0) {
         setActiveTab('dorms-waitlist');
     }
   };
@@ -391,10 +255,7 @@ const App: React.FC = () => {
     return (
       <>
         <div className="fixed top-4 right-4 z-50">
-          <button 
-            onClick={() => setCurrentRole(Role.ADMIN)}
-            className="bg-black/80 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg hover:bg-black transition-colors backdrop-blur-sm"
-          >
+          <button onClick={() => setCurrentRole(Role.ADMIN)} className="bg-black/80 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg hover:bg-black transition-colors backdrop-blur-sm">
             切换回管理端
           </button>
         </div>
@@ -406,19 +267,14 @@ const App: React.FC = () => {
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
       <div className="relative">
-         {/* Role Switcher for Demo */}
          <div className="fixed bottom-4 right-4 z-50">
-            <button 
-              onClick={() => setCurrentRole(Role.TENANT)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-            >
+            <button onClick={() => setCurrentRole(Role.TENANT)} className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
               <span>📱</span> 模拟租户端小程序
             </button>
           </div>
 
         {renderContent()}
 
-        {/* Global Modals */}
         {checkoutModalOpen && tenantToCheckout && (
             <CheckoutModal 
                 isOpen={checkoutModalOpen}

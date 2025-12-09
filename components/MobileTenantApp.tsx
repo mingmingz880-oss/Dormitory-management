@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { QrCode, Zap, Wrench, User, Home, ScanFace, Lock, CreditCard, Bell, AlertTriangle, Smartphone, Camera, Check, Loader2, ArrowRight, MapPin, History, Wallet, LogOut, FileText, ArrowLeftRight, ChevronLeft, ChevronRight, Settings, Droplets, Calendar } from 'lucide-react';
+import { QrCode, Zap, Wrench, User, Home, ScanFace, Lock, CreditCard, Bell, AlertTriangle, Smartphone, Camera, Check, Loader2, ArrowRight, MapPin, History, Wallet, LogOut, FileText, ArrowLeftRight, ChevronLeft, ChevronRight, Settings, Droplets, Calendar, FileSpreadsheet, Key, ListTodo } from 'lucide-react';
 import { MOCK_TENANTS } from '../constants';
 import { TenantStatus } from '../types';
 
@@ -13,19 +13,43 @@ const MobileTenantApp: React.FC = () => {
     const [appState, setAppState] = useState<AppState>('LOGIN');
     const [currentView, setCurrentView] = useState<MainView>('DASHBOARD');
     const [balance, setBalance] = useState(12.50);
-    const [showFaceScan, setShowFaceScan] = useState(false);
     
-    // Check-in Flow State
+    // Utility Mode State
+    const [utilityMode, setUtilityMode] = useState<'PREPAID' | 'POSTPAID'>('PREPAID');
+    
+    // Check-in / Setup Flow State
     const [checkInStep, setCheckInStep] = useState<CheckInStep>('INFO');
     const [password, setPassword] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
+    
+    // Demo State: To show pending tasks
+    const [isPasswordSet, setIsPasswordSet] = useState(false); 
 
     // Utility Detail State
     const [utilityType, setUtilityType] = useState<'ELEC' | 'WATER'>('ELEC');
     const [selectedMonth, setSelectedMonth] = useState('2023-10');
 
-    // Mock User Data
-    const [currentUser, setCurrentUser] = useState(MOCK_TENANTS[0]);
+    // Mock User Data - Fallback if mock data is empty
+    const defaultUser = MOCK_TENANTS[0] || {
+        id: 't-demo',
+        name: '刘洋',
+        phone: '13800000000',
+        company: '示例企业',
+        roomId: 'room-1',
+        bedId: 'bed-1',
+        status: 'ACTIVE',
+        rentStatus: 'PAID',
+        rentDueDate: '2023-11-01',
+        lastAccess: new Date().toISOString(),
+        faceRegistered: false 
+    };
+
+    const [currentUser, setCurrentUser] = useState({
+        ...defaultUser,
+        name: '刘洋', 
+        faceRegistered: false, 
+        rentStatus: 'PAID'
+    });
 
     // Process States
     const [isProcessing, setIsProcessing] = useState(false);
@@ -34,24 +58,27 @@ const MobileTenantApp: React.FC = () => {
     // --- Actions ---
 
     const handleLogin = (type: 'NEW' | 'OLD' | 'EVICTED') => {
-        if (!phoneNumber && type !== 'EVICTED') { // Allow evicted login demo without phone check strictly
+        if (!phoneNumber && type !== 'EVICTED') {
             alert("请输入手机号");
             return;
         }
         
         if (type === 'NEW') {
             setCurrentUser({
-                ...MOCK_TENANTS[0],
+                ...defaultUser,
                 name: "李明 (新员工)",
                 status: 'PENDING' as any, 
                 roomNumber: 'A栋-305',
-                bedNumber: '2号床'
+                bedNumber: '2号床',
+                faceRegistered: false,
+                rentStatus: 'PAID'
             } as any);
+            setIsPasswordSet(false); 
             setAppState('CHECKIN');
             setCheckInStep('INFO');
         } else if (type === 'EVICTED') {
              setCurrentUser({
-                ...MOCK_TENANTS[0],
+                ...defaultUser,
                 name: "王强 (已离职)",
                 status: 'EVICTED' as any,
                 roomNumber: 'A栋-201',
@@ -59,7 +86,14 @@ const MobileTenantApp: React.FC = () => {
             } as any);
             setAppState('MAIN');
         } else {
-            setCurrentUser(MOCK_TENANTS[0]);
+            // Old Tenant - Force pending tasks to show for demo purposes
+            setCurrentUser({
+                ...defaultUser,
+                name: "张伟 (老租户)",
+                faceRegistered: false, // Force false to show "Face ID Pending" card
+                rentStatus: 'PAID'
+            } as any);
+            setIsPasswordSet(false); // Force false to show "Password Pending" card
             setAppState('MAIN');
             setCurrentView('DASHBOARD');
         }
@@ -74,7 +108,17 @@ const MobileTenantApp: React.FC = () => {
 
     const handleFaceScan = () => {
         setTimeout(() => {
-            setCheckInStep('PASSWORD');
+            setCurrentUser(prev => ({ ...prev, faceRegistered: true })); 
+            if (checkInStep === 'FACE') {
+                if (!isPasswordSet) {
+                    setCheckInStep('PASSWORD');
+                } else {
+                     setCheckInStep('SYNC');
+                     handleSyncPermissions();
+                }
+            } else {
+                setAppState('MAIN');
+            }
         }, 2000);
     };
 
@@ -91,7 +135,6 @@ const MobileTenantApp: React.FC = () => {
             setProcessSuccess(true);
             
             if (action === 'CHECKOUT') {
-                // After checkout, user becomes evicted
                 setTimeout(() => {
                     setCurrentUser(prev => ({ ...prev, status: 'EVICTED' as any }));
                     setProcessSuccess(false);
@@ -99,6 +142,11 @@ const MobileTenantApp: React.FC = () => {
                 }, 2000);
             }
         }, 3000);
+    };
+
+    const startQuickSetup = (step: CheckInStep) => {
+        setAppState('CHECKIN');
+        setCheckInStep(step);
     };
 
     // --- Renderers ---
@@ -139,7 +187,7 @@ const MobileTenantApp: React.FC = () => {
                     >
                         老租户直接登录
                     </button>
-                    <button 
+                     <button 
                         onClick={() => handleLogin('EVICTED')}
                         className="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-medium text-sm hover:bg-slate-200 transition-all active:scale-[0.98]"
                     >
@@ -147,31 +195,25 @@ const MobileTenantApp: React.FC = () => {
                     </button>
                 </div>
             </div>
-            <p className="mt-auto text-center text-xs text-slate-400">
-                未注册手机号将自动关联企业预分配信息
-            </p>
         </div>
     );
 
     const renderCheckInWizard = () => {
-        return (
+         return (
             <div className="flex flex-col h-full bg-slate-50 relative">
-                {/* Header */}
                 <div className="bg-white p-6 border-b border-slate-200 shrink-0">
-                    <h2 className="text-xl font-bold text-slate-900">自助入住办理</h2>
-                    <div className="flex gap-2 mt-4">
-                        {['INFO', 'FACE', 'PASSWORD', 'DONE'].map((s, i) => {
-                            const steps = ['INFO', 'FACE', 'PASSWORD', 'SYNC', 'DONE'];
-                            const currentIndex = steps.indexOf(checkInStep);
-                            const thisIndex = steps.indexOf(s);
-                            return (
-                                <div key={s} className={`h-1 flex-1 rounded-full ${thisIndex <= currentIndex ? 'bg-blue-600' : 'bg-slate-200'}`}></div>
-                            )
-                        })}
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-bold text-slate-900">
+                             {currentUser.status === 'ACTIVE' ? '补充信息' : '自助入住办理'}
+                        </h2>
+                        {currentUser.status === 'ACTIVE' && (
+                            <button onClick={() => setAppState('MAIN')} className="text-slate-400">
+                                <ArrowLeftRight size={20} className="rotate-180" />
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 p-6 overflow-y-auto">
                     {checkInStep === 'INFO' && (
                         <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -280,6 +322,7 @@ const MobileTenantApp: React.FC = () => {
                             <button 
                                 onClick={() => {
                                     if (password.length === 6) {
+                                        setIsPasswordSet(true); 
                                         setCheckInStep('SYNC');
                                         handleSyncPermissions();
                                     } else {
@@ -325,8 +368,8 @@ const MobileTenantApp: React.FC = () => {
                                 <Check className="text-white" size={48} />
                             </div>
                             <div>
-                                <h3 className="text-2xl font-bold text-slate-900">办理成功！</h3>
-                                <p className="text-slate-500 mt-2 px-8">您已获得 A栋-305室 的通行权限，现在可以无需钥匙直接拎包入住。</p>
+                                <h3 className="text-2xl font-bold text-slate-900">操作成功！</h3>
+                                <p className="text-slate-500 mt-2 px-8">您的通行权限已更新，现在可以正常使用。</p>
                             </div>
                             <div className="w-full max-w-xs space-y-3">
                                 <button 
@@ -336,17 +379,206 @@ const MobileTenantApp: React.FC = () => {
                                     }}
                                     className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-all"
                                 >
-                                    进入首页
+                                    返回首页
                                 </button>
                                 <p className="text-xs text-slate-400">大门支持刷脸，房门支持密码或手机一键开门</p>
                             </div>
                         </div>
                     )}
-
                 </div>
             </div>
         )
     };
+
+    const renderDashboard = () => (
+        <div className="flex flex-col h-full bg-slate-50 relative no-scrollbar">
+            {/* Header with increased padding */}
+            <div className="bg-blue-600 p-6 pb-24 rounded-b-[2.5rem] text-white relative shrink-0 transition-all z-0 shadow-xl">
+                
+                {/* 1. Utility Mode Toggle */}
+                <div className="flex justify-center mb-6">
+                    <div className="bg-blue-800/50 p-1 rounded-lg flex items-center backdrop-blur-sm border border-blue-500/30">
+                        <button 
+                            onClick={() => setUtilityMode('PREPAID')}
+                            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                utilityMode === 'PREPAID' ? 'bg-white text-blue-600 shadow-sm' : 'text-blue-100 hover:text-white'
+                            }`}
+                        >
+                            预付费模式
+                        </button>
+                        <button 
+                            onClick={() => setUtilityMode('POSTPAID')}
+                            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                utilityMode === 'POSTPAID' ? 'bg-white text-blue-600 shadow-sm' : 'text-blue-100 hover:text-white'
+                            }`}
+                        >
+                            账单模式
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-3" onClick={() => setCurrentView('PROFILE')}>
+                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-lg font-bold border-2 border-white/30 cursor-pointer">
+                            {currentUser.name.charAt(0)}
+                        </div>
+                        <div className="cursor-pointer">
+                            <h2 className="font-semibold text-lg flex items-center gap-2">
+                                {currentUser.name} <ChevronRight size={14} className="text-blue-200" />
+                            </h2>
+                            <p className="text-blue-100 text-xs">{(currentUser as any).roomNumber || 'A栋-305室'} • {(currentUser as any).bedNumber || '2号床'}</p>
+                        </div>
+                    </div>
+                    <button className="relative">
+                        <Bell size={24} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Content with Z-Index and Negative Margin */}
+            <div className="flex-1 overflow-y-auto px-6 -mt-20 relative z-10 pb-10">
+                
+                {/* 2. Pending Tasks / Reminders */}
+                {(!currentUser.faceRegistered || !isPasswordSet) && (
+                    <div className="mb-6 space-y-3">
+                        <h4 className="text-white/90 text-xs font-bold px-1 flex items-center gap-1 mb-2">
+                             <ListTodo size={14}/> 待办事项
+                        </h4>
+                        {!currentUser.faceRegistered && (
+                            <div 
+                                onClick={() => startQuickSetup('FACE')}
+                                className="bg-white border-l-4 border-orange-500 rounded-xl p-4 flex items-center justify-between shadow-lg shadow-slate-200/50 cursor-pointer active:scale-[0.98] transition-all"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center">
+                                        <ScanFace size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-slate-800">待录入人脸</h4>
+                                        <p className="text-xs text-slate-500">大门需刷脸通行，请点击录入</p>
+                                    </div>
+                                </div>
+                                <div className="px-3 py-1 bg-orange-50 text-orange-600 rounded text-xs font-bold">去办理</div>
+                            </div>
+                        )}
+                        {!isPasswordSet && (
+                            <div 
+                                onClick={() => startQuickSetup('PASSWORD')}
+                                className="bg-white border-l-4 border-indigo-500 rounded-xl p-4 flex items-center justify-between shadow-lg shadow-slate-200/50 cursor-pointer active:scale-[0.98] transition-all"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
+                                        <Key size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-slate-800">待设置门锁密码</h4>
+                                        <p className="text-xs text-slate-500">房门需密码开启，请点击设置</p>
+                                    </div>
+                                </div>
+                                <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded text-xs font-bold">去设置</div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* 3. Dynamic Utility Balance Card */}
+                <div 
+                    onClick={() => setCurrentView('UTILITY_DETAIL')}
+                    className="p-5 bg-white rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-100 mb-6 cursor-pointer active:scale-[0.98] transition-transform"
+                >
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                            <Zap size={18} className="text-yellow-500" /> 
+                            {utilityMode === 'PREPAID' ? '水电余额' : '本月账单'}
+                        </h3>
+                        <span className="text-xs text-slate-400 flex items-center gap-1">
+                            {utilityMode === 'PREPAID' ? '预付费表' : '账单详情'} <ChevronRight size={12}/>
+                        </span>
+                    </div>
+
+                    {utilityMode === 'PREPAID' ? (
+                        // PREPAID MODE VIEW
+                        <>
+                            <div className="flex justify-between items-end">
+                                <div>
+                                    <span className="text-3xl font-bold text-slate-900">¥{balance.toFixed(2)}</span>
+                                    <p className="text-xs text-slate-500 mt-1">预计剩余 3 天</p>
+                                </div>
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setBalance(b => b + 50);
+                                    }}
+                                    className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg active:scale-95 transition-transform">
+                                    充值
+                                </button>
+                            </div>
+                            <div className="mt-4 w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full ${balance < 10 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${Math.min(balance, 100)}%` }}></div>
+                            </div>
+                        </>
+                    ) : (
+                        // POSTPAID (BILL) MODE VIEW
+                        <>
+                            <div className="flex justify-between items-end">
+                                <div>
+                                    <span className="text-3xl font-bold text-slate-900">¥124.50</span>
+                                    <p className="text-xs text-slate-500 mt-1">账单日剩余 5 天</p>
+                                </div>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); }}
+                                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg active:scale-95 transition-transform">
+                                    缴费
+                                </button>
+                            </div>
+                            <div className="mt-4 flex gap-4 text-xs text-slate-500 pt-3 border-t border-slate-100">
+                                <div>待缴电费: <span className="font-bold text-slate-700">¥104.50</span></div>
+                                <div>待缴水费: <span className="font-bold text-slate-700">¥20.00</span></div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* 4. Main Services Grid */}
+                <h3 className="font-bold text-slate-800 mb-3 text-sm">常用服务</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <button 
+                        onClick={() => setCurrentView('REPAIR')}
+                        className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform"
+                    >
+                        <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center">
+                            <Wrench size={24} />
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">故障报修</span>
+                    </button>
+
+                    <button 
+                        onClick={() => setCurrentView('TRANSFER')}
+                        className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform"
+                    >
+                         <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
+                            <ArrowLeftRight size={24} />
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">申请换宿</span>
+                    </button>
+
+                     <button 
+                        onClick={() => setCurrentView('CHECKOUT')}
+                        className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform"
+                    >
+                         <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center">
+                            <LogOut size={24} />
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">自助退宿</span>
+                    </button>
+                    
+                    <div className="bg-slate-50 p-5 rounded-xl border border-dashed border-slate-200 flex flex-col items-center text-center gap-3 justify-center">
+                        <span className="text-xs text-slate-400">更多服务敬请期待</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 
     const renderEvictedApp = () => (
         <div className="flex flex-col h-full bg-slate-50 relative no-scrollbar">
@@ -405,146 +637,18 @@ const MobileTenantApp: React.FC = () => {
                         </div>
                     </div>
                 </div>
-
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
-                    <h4 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
-                        <History size={16} /> 住宿记录
-                    </h4>
-                    <div className="relative pl-4 border-l-2 border-slate-100 space-y-6">
-                        <div className="relative">
-                            <div className="absolute -left-[21px] top-1 w-3 h-3 bg-red-400 rounded-full border-2 border-white"></div>
-                            <p className="text-xs text-slate-400 mb-1">2023-10-26 10:00</p>
-                            <p className="text-sm font-bold text-slate-900">办理退宿</p>
-                            <p className="text-xs text-slate-500 mt-1">管理员已确认，权限已收回</p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );
-
-    const renderDashboard = () => (
-        <div className="flex flex-col h-full bg-slate-50 relative no-scrollbar">
-            {/* Header */}
-            <div className="bg-blue-600 p-6 pb-8 rounded-b-[2.5rem] text-white relative shrink-0">
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-3" onClick={() => setCurrentView('PROFILE')}>
-                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-lg font-bold border-2 border-white/30 cursor-pointer">
-                            {currentUser.name.charAt(0)}
-                        </div>
-                        <div className="cursor-pointer">
-                            <h2 className="font-semibold text-lg flex items-center gap-2">
-                                {currentUser.name} <ChevronRight size={14} className="text-blue-200" />
-                            </h2>
-                            <p className="text-blue-100 text-xs">{(currentUser as any).roomNumber || 'A栋-305室'} • {(currentUser as any).bedNumber || '2号床'}</p>
-                        </div>
-                    </div>
-                    <button className="relative">
-                        <Bell size={24} />
-                        {(currentUser.rentStatus === 'OVERDUE_WARNING' || currentUser.rentStatus === 'OVERDUE_FROZEN') && <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-blue-600"></span>}
-                    </button>
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 -mt-6">
-                
-                {/* Rent Alert */}
-                {(currentUser.rentStatus === 'OVERDUE_WARNING' || currentUser.rentStatus === 'OVERDUE_FROZEN') && (
-                    <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 shadow-sm">
-                        <AlertTriangle className="text-red-500 shrink-0" size={20} />
-                        <div>
-                            <h4 className="text-sm font-bold text-red-700">房租逾期提醒</h4>
-                            <p className="text-xs text-red-600 mt-1">
-                                {currentUser.rentStatus === 'OVERDUE_FROZEN'
-                                    ? "您的通行权限已被冻结，请立即前往前台缴费。"
-                                    : "请在3天内缴纳房租，以免通行受限。"}
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Utility Balance */}
-                <div 
-                    onClick={() => setCurrentView('UTILITY_DETAIL')}
-                    className="p-5 bg-white rounded-2xl shadow-sm border border-slate-100 mb-6 cursor-pointer active:scale-[0.98] transition-transform"
-                >
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <Zap size={18} className="text-yellow-500" /> 水电余额
-                        </h3>
-                        <span className="text-xs text-slate-400 flex items-center gap-1">预付费表 <ChevronRight size={12}/></span>
-                    </div>
-                    <div className="flex justify-between items-end">
-                        <div>
-                            <span className="text-3xl font-bold text-slate-900">¥{balance.toFixed(2)}</span>
-                            <p className="text-xs text-slate-500 mt-1">预计剩余 3 天</p>
-                        </div>
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setBalance(b => b + 50);
-                            }}
-                            className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg active:scale-95 transition-transform">
-                            充值
-                        </button>
-                    </div>
-                    <div className="mt-4 w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full ${balance < 10 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${Math.min(balance, 100)}%` }}></div>
-                    </div>
-                </div>
-
-                {/* Main Services Grid */}
-                <h3 className="font-bold text-slate-800 mb-3 text-sm">常用服务</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <button 
-                        onClick={() => setCurrentView('REPAIR')}
-                        className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform"
-                    >
-                        <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center">
-                            <Wrench size={24} />
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">故障报修</span>
-                    </button>
-
-                    <button 
-                        onClick={() => setCurrentView('TRANSFER')}
-                        className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform"
-                    >
-                         <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
-                            <ArrowLeftRight size={24} />
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">申请换宿</span>
-                    </button>
-
-                     <button 
-                        onClick={() => setCurrentView('CHECKOUT')}
-                        className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform"
-                    >
-                         <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center">
-                            <LogOut size={24} />
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">自助退宿</span>
-                    </button>
-                    
-                    {/* Placeholder for layout balance */}
-                    <div className="bg-slate-50 p-5 rounded-xl border border-dashed border-slate-200 flex flex-col items-center text-center gap-3 justify-center">
-                        <span className="text-xs text-slate-400">更多服务敬请期待</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-
+    
     const renderProfile = () => (
         <div className="flex flex-col h-full bg-slate-50">
-            {/* Header */}
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center gap-3">
                 <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 -ml-2 text-slate-600 active:bg-slate-100 rounded-full">
                     <ChevronLeft size={24} />
                 </button>
                 <h2 className="text-lg font-bold text-slate-900">个人中心</h2>
             </div>
-
             <div className="flex-1 p-6 overflow-y-auto">
                  <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
                     <div className="p-6 flex flex-col items-center border-b border-slate-100">
@@ -569,7 +673,6 @@ const MobileTenantApp: React.FC = () => {
                         </div>
                     </div>
                  </div>
-
                  <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
                     <div className="p-4 border-b border-slate-100 font-bold text-slate-800 text-sm">住宿信息</div>
                     <div className="p-4 space-y-4">
@@ -583,11 +686,15 @@ const MobileTenantApp: React.FC = () => {
                         </div>
                          <div className="flex justify-between items-center text-sm">
                             <span className="text-slate-500">门锁密码</span>
-                            <span className="font-medium text-slate-900">****** <span className="text-blue-600 text-xs ml-2">重置</span></span>
+                             <div className="flex items-center gap-2">
+                                <span className="font-medium text-slate-900">
+                                    {isPasswordSet ? '******' : <span className="text-red-500">未设置</span>}
+                                </span>
+                                {isPasswordSet && <span className="text-blue-600 text-xs ml-2">重置</span>}
+                            </div>
                         </div>
                     </div>
                  </div>
-
                  <button 
                     onClick={handleLogout}
                     className="w-full bg-white border border-slate-200 text-red-600 py-3 rounded-xl font-medium shadow-sm hover:bg-red-50"
@@ -600,14 +707,12 @@ const MobileTenantApp: React.FC = () => {
 
     const renderActionFlow = (action: 'CHECKOUT' | 'TRANSFER') => (
         <div className="flex flex-col h-full bg-slate-50">
-             {/* Header */}
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center gap-3">
                 <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 -ml-2 text-slate-600 active:bg-slate-100 rounded-full">
                     <ChevronLeft size={24} />
                 </button>
                 <h2 className="text-lg font-bold text-slate-900">{action === 'CHECKOUT' ? '自助退宿' : '申请换宿'}</h2>
             </div>
-
             <div className="flex-1 p-6 flex flex-col">
                 {processSuccess ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-center animate-in zoom-in">
@@ -621,7 +726,7 @@ const MobileTenantApp: React.FC = () => {
                                 : '换宿申请已提交，请留意短信通知，审核通过后将下发新房间权限。'}
                         </p>
                         <button 
-                            onClick={() => action === 'TRANSFER' ? setCurrentView('DASHBOARD') : null} // Checkout auto redirects
+                            onClick={() => action === 'TRANSFER' ? setCurrentView('DASHBOARD') : null}
                             className="mt-8 px-8 py-3 bg-slate-900 text-white rounded-lg font-medium"
                         >
                             {action === 'CHECKOUT' ? '正在跳转...' : '返回首页'}
@@ -709,7 +814,6 @@ const MobileTenantApp: React.FC = () => {
 
     const renderUtilityDetail = () => (
         <div className="flex flex-col h-full bg-slate-50">
-            {/* Header */}
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center gap-3">
                 <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 -ml-2 text-slate-600 active:bg-slate-100 rounded-full">
                     <ChevronLeft size={24} />
@@ -718,7 +822,6 @@ const MobileTenantApp: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-6">
-                {/* Tabs & Month */}
                 <div className="flex justify-between items-center">
                     <div className="bg-white p-1 rounded-lg border border-slate-200 inline-flex shadow-sm">
                         <button
@@ -750,12 +853,10 @@ const MobileTenantApp: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Summary */}
                 <div className="text-sm text-slate-600">
                     以下 <span className="font-bold text-slate-900">1</span> 台{utilityType === 'ELEC' ? '电表' : '水表'}，在 {selectedMonth}，总用量 <span className="font-bold text-xl text-slate-900">{utilityType === 'ELEC' ? '124.50' : '8.20'}</span> {utilityType === 'ELEC' ? '度' : '吨'}
                 </div>
 
-                {/* Table List */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="grid grid-cols-4 bg-slate-50 p-3 text-xs font-bold text-slate-500 border-b border-slate-100 text-center">
                         <div>抄取时间</div>
@@ -763,7 +864,6 @@ const MobileTenantApp: React.FC = () => {
                         <div>实际用量</div>
                     </div>
                     <div className="divide-y divide-slate-100">
-                        {/* Mock Rows */}
                         {[1, 2, 3, 4, 5].map((i) => {
                             const date = `${selectedMonth}-${String(31 - i * 3).padStart(2, '0')} 09:00`;
                             const reading = utilityType === 'ELEC' ? (1000 + i * 15).toFixed(2) : (200 + i * 2).toFixed(2);
@@ -785,12 +885,8 @@ const MobileTenantApp: React.FC = () => {
 
     return (
         <div className="flex justify-center items-center min-h-screen bg-gray-200 p-4 font-sans">
-            {/* Phone Frame */}
             <div className="w-full max-w-[375px] h-[812px] bg-white rounded-[40px] shadow-2xl overflow-hidden relative border-8 border-slate-900 flex flex-col">
-                {/* Notch */}
                 <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-40 h-6 bg-slate-900 rounded-b-2xl z-20"></div>
-
-                {/* Status Bar (Fake) */}
                 <div className="h-12 bg-slate-900 w-full flex justify-between items-end px-6 pb-2 text-white text-xs shrink-0">
                     <span>9:41</span>
                     <div className="flex gap-1">
@@ -798,8 +894,6 @@ const MobileTenantApp: React.FC = () => {
                         <span>100%</span>
                     </div>
                 </div>
-
-                {/* App Content based on State */}
                 <div className="flex-1 overflow-hidden relative h-full bg-slate-50">
                     {appState === 'LOGIN' && renderLogin()}
                     {appState === 'CHECKIN' && renderCheckInWizard()}

@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tenant, Room, MaintenanceTicket, RentStatus } from '../types';
-import { AlertTriangle, CheckCircle, X, Loader2, CreditCard, Wrench, Shield, UserX, AlertCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, X, Loader2, CreditCard, Wrench, Shield, UserX, AlertCircle, CheckSquare } from 'lucide-react';
 
 interface CheckoutModalProps {
     isOpen: boolean;
@@ -21,22 +22,29 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, tenant, 
         database: 'PENDING'
     });
 
+    // Manual Verification States
+    const [rentVerified, setRentVerified] = useState(false);
+    const [utilityVerified, setUtilityVerified] = useState(false);
+
     // Reset state when opening
     useEffect(() => {
         if (isOpen) {
             setStep('CHECK');
             setProcessStatus({ faceId: 'PENDING', lockCode: 'PENDING', database: 'PENDING' });
+            setRentVerified(false);
+            setUtilityVerified(false);
         }
     }, [isOpen]);
 
     if (!isOpen) return null;
 
-    // --- Validation Logic ---
+    // --- Validation Logic (For Display Only) ---
     const pendingTickets = tickets.filter(t => t.room === room?.number && t.status !== 'DONE');
     const hasUnpaidRent = tenant.rentStatus !== RentStatus.PAID;
     const hasUtilityDebt = (room?.utilityBalance || 0) < 0;
 
-    const hasBlockers = hasUnpaidRent || hasUtilityDebt || pendingTickets.length > 0;
+    // Can only checkout if verified
+    const canCheckout = rentVerified && utilityVerified;
 
     // --- Actions ---
     const handleExecuteCheckout = () => {
@@ -96,58 +104,43 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, tenant, 
                                 </div>
                             </div>
 
-                            {/* Validation Items */}
-                            <div className="space-y-3">
-                                <h4 className="text-sm font-bold text-slate-700">退宿前校验</h4>
+                            {/* Manual Verification Section */}
+                            <div className="space-y-4 border border-slate-200 rounded-xl p-5 bg-slate-50/50">
+                                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <CheckSquare size={16} /> 退宿前人工核验
+                                </h4>
+                                <p className="text-xs text-slate-500 mb-2">请管理员核实费用情况，确认无误后勾选放行。未勾选无法办理退宿。</p>
                                 
-                                {/* Rent Check */}
-                                <div className={`flex items-center justify-between p-3 rounded-lg border ${hasUnpaidRent ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <CreditCard size={18} className={hasUnpaidRent ? 'text-red-500' : 'text-green-600'} />
-                                        <span className="text-sm font-medium">房租缴纳状态</span>
+                                <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-red-400 transition-colors select-none">
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${rentVerified ? 'bg-red-600 border-red-600' : 'bg-white border-slate-300'}`}>
+                                        {rentVerified && <CheckCircle size={14} className="text-white" />}
                                     </div>
-                                    {hasUnpaidRent ? (
-                                        <span className="text-xs font-bold text-red-600 px-2 py-1 bg-white rounded border border-red-100">存在欠费</span>
-                                    ) : (
-                                        <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle size={12} /> 已结清</span>
-                                    )}
-                                </div>
+                                    <input type="checkbox" className="hidden" checked={rentVerified} onChange={(e) => setRentVerified(e.target.checked)} />
+                                    <div className="flex-1">
+                                        <div className="text-sm font-bold text-slate-700">确认房租已结清</div>
+                                        <div className="text-xs text-slate-400">系统显示状态: {hasUnpaidRent ? '欠费' : '正常'}</div>
+                                    </div>
+                                    {hasUnpaidRent && <AlertTriangle size={16} className="text-red-500" />}
+                                </label>
 
-                                {/* Utility Check */}
-                                <div className={`flex items-center justify-between p-3 rounded-lg border ${hasUtilityDebt ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <AlertTriangle size={18} className={hasUtilityDebt ? 'text-red-500' : 'text-green-600'} />
-                                        <span className="text-sm font-medium">水电余额校验</span>
+                                <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-red-400 transition-colors select-none">
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${utilityVerified ? 'bg-red-600 border-red-600' : 'bg-white border-slate-300'}`}>
+                                        {utilityVerified && <CheckCircle size={14} className="text-white" />}
                                     </div>
-                                    {hasUtilityDebt ? (
-                                        <span className="text-xs font-bold text-red-600 px-2 py-1 bg-white rounded border border-red-100">
-                                            欠费 ¥{Math.abs(room?.utilityBalance || 0).toFixed(2)}
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle size={12} /> 余额正常</span>
-                                    )}
-                                </div>
-
-                                {/* Ticket Check */}
-                                <div className={`flex items-center justify-between p-3 rounded-lg border ${pendingTickets.length > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <Wrench size={18} className={pendingTickets.length > 0 ? 'text-orange-500' : 'text-green-600'} />
-                                        <span className="text-sm font-medium">未完成报修工单</span>
+                                    <input type="checkbox" className="hidden" checked={utilityVerified} onChange={(e) => setUtilityVerified(e.target.checked)} />
+                                    <div className="flex-1">
+                                        <div className="text-sm font-bold text-slate-700">确认水电已结算</div>
+                                        <div className="text-xs text-slate-400">请核实智能电表余额是否结清</div>
                                     </div>
-                                    {pendingTickets.length > 0 ? (
-                                        <span className="text-xs font-bold text-orange-600 px-2 py-1 bg-white rounded border border-orange-100">
-                                            {pendingTickets.length} 个待处理
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle size={12} /> 无关联工单</span>
-                                    )}
-                                </div>
+                                    {hasUtilityDebt && <AlertTriangle size={16} className="text-red-500" />}
+                                </label>
                             </div>
 
-                            {hasBlockers && (
-                                <div className="flex items-start gap-2 text-red-600 text-xs bg-red-50 p-3 rounded">
-                                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                                    <p>存在未结清款项或未完成工单，建议处理后再退宿。强制退宿可能导致财务坏账。</p>
+                            {/* Pending Tickets Info (Informational Only) */}
+                            {pendingTickets.length > 0 && (
+                                <div className="flex items-start gap-2 text-orange-600 text-xs bg-orange-50 p-3 rounded">
+                                    <Wrench size={16} className="shrink-0 mt-0.5" />
+                                    <p>提示：该房间仍有 {pendingTickets.length} 个未完成的报修工单，请注意。</p>
                                 </div>
                             )}
 
@@ -157,9 +150,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, tenant, 
                                 </button>
                                 <button 
                                     onClick={handleExecuteCheckout}
-                                    className={`flex-1 py-2.5 rounded-lg text-white font-medium shadow-sm transition-all ${hasBlockers ? 'bg-red-400 hover:bg-red-500' : 'bg-red-600 hover:bg-red-700'}`}
+                                    disabled={!canCheckout}
+                                    className={`flex-1 py-2.5 rounded-lg text-white font-medium shadow-sm transition-all flex items-center justify-center gap-2 ${canCheckout ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-300 cursor-not-allowed'}`}
                                 >
-                                    {hasBlockers ? '强制退宿' : '确认退宿'}
+                                    <UserX size={18} /> 确认退宿
                                 </button>
                             </div>
                         </div>

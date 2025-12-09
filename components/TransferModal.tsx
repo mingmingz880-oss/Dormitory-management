@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tenant, Room, BedStatus, RentStatus, MaintenanceTicket } from '../types';
-import { CheckCircle, AlertTriangle, ArrowRight, Bed, Loader2, X, ArrowLeftRight, Bell } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ArrowRight, Bed, Loader2, X, ArrowLeftRight, Bell, Square, CheckSquare } from 'lucide-react';
 
 interface TransferModalProps {
     isOpen: boolean;
@@ -23,11 +23,17 @@ const TransferModal: React.FC<TransferModalProps> = ({ isOpen, onClose, tenant, 
         notify: 'PENDING'
     });
 
+    // Manual Verification States
+    const [rentVerified, setRentVerified] = useState(false);
+    const [utilityVerified, setUtilityVerified] = useState(false);
+
     useEffect(() => {
         if (isOpen) {
             setStep('CHECK');
             setSelectedTargetBed(null);
             setProcessStatus({ revoke: 'PENDING', grant: 'PENDING', notify: 'PENDING' });
+            setRentVerified(false);
+            setUtilityVerified(false);
         }
     }, [isOpen]);
 
@@ -35,12 +41,11 @@ const TransferModal: React.FC<TransferModalProps> = ({ isOpen, onClose, tenant, 
 
     // --- Validation ---
     const currentRoom = rooms.find(r => r.id === tenant.roomId);
-    const pendingTickets = tickets.filter(t => t.tenantId === tenant.id && t.status !== 'DONE');
-    const hasUnpaidRent = tenant.rentStatus !== RentStatus.PAID;
-    const canProceed = !hasUnpaidRent && pendingTickets.length === 0;
+    
+    // Proceed logic: Only allow if manual checks are done
+    const canProceed = rentVerified && utilityVerified;
 
     // --- Available Beds (Same Gender) ---
-    // In real app, we might verify building logic here too
     const availableRooms = rooms
         .filter(r => r.gender === (currentRoom?.gender || 'MALE') && r.id !== currentRoom?.id) // Same gender, different room
         .filter(r => r.beds.some(b => b.status === BedStatus.EMPTY));
@@ -106,42 +111,46 @@ const TransferModal: React.FC<TransferModalProps> = ({ isOpen, onClose, tenant, 
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                <h4 className="text-sm font-bold text-slate-700">调宿资格校验</h4>
+                            <div className="space-y-4 border border-slate-200 rounded-xl p-5 bg-slate-50/50">
+                                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <CheckSquare size={16} /> 费用人工核验
+                                </h4>
+                                <p className="text-xs text-slate-500 mb-2">请管理员线下核实相关费用情况，确认无误后勾选放行。</p>
                                 
-                                <div className={`flex items-center justify-between p-3 rounded-lg border ${hasUnpaidRent ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-                                    <span className="text-sm font-medium flex items-center gap-2">
-                                        {hasUnpaidRent ? <AlertTriangle size={16} className="text-red-500" /> : <CheckCircle size={16} className="text-green-600" />}
-                                        房租状态
-                                    </span>
-                                    <span className={`text-xs font-bold ${hasUnpaidRent ? 'text-red-600' : 'text-green-600'}`}>
-                                        {hasUnpaidRent ? '存在欠费' : '正常'}
-                                    </span>
-                                </div>
+                                <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors select-none">
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${rentVerified ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
+                                        {rentVerified && <CheckCircle size={14} className="text-white" />}
+                                    </div>
+                                    <input type="checkbox" className="hidden" checked={rentVerified} onChange={(e) => setRentVerified(e.target.checked)} />
+                                    <div className="flex-1">
+                                        <div className="text-sm font-bold text-slate-700">确认房租无欠费</div>
+                                        <div className="text-xs text-slate-400">系统显示状态: {tenant.rentStatus === RentStatus.PAID ? '正常' : '欠费'}</div>
+                                    </div>
+                                </label>
 
-                                <div className={`flex items-center justify-between p-3 rounded-lg border ${pendingTickets.length > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
-                                    <span className="text-sm font-medium flex items-center gap-2">
-                                        {pendingTickets.length > 0 ? <AlertTriangle size={16} className="text-orange-500" /> : <CheckCircle size={16} className="text-green-600" />}
-                                        报修工单
-                                    </span>
-                                    <span className={`text-xs font-bold ${pendingTickets.length > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                        {pendingTickets.length > 0 ? '有未完成工单' : '无'}
-                                    </span>
-                                </div>
+                                <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors select-none">
+                                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${utilityVerified ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
+                                        {utilityVerified && <CheckCircle size={14} className="text-white" />}
+                                    </div>
+                                    <input type="checkbox" className="hidden" checked={utilityVerified} onChange={(e) => setUtilityVerified(e.target.checked)} />
+                                    <div className="flex-1">
+                                        <div className="text-sm font-bold text-slate-700">确认水电已结算</div>
+                                        <div className="text-xs text-slate-400">请核实智能电表余额是否结清</div>
+                                    </div>
+                                </label>
                             </div>
 
-                            {canProceed ? (
-                                <button 
-                                    onClick={() => setStep('SELECT')}
-                                    className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 mt-4 flex items-center justify-center gap-2"
-                                >
-                                    下一步：选择新床位 <ArrowRight size={16} />
-                                </button>
-                            ) : (
-                                <div className="p-3 bg-red-100 text-red-700 text-xs rounded text-center">
-                                    请先处理欠费或工单后方可调宿。
-                                </div>
-                            )}
+                            <button 
+                                onClick={() => setStep('SELECT')}
+                                disabled={!canProceed}
+                                className={`w-full py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
+                                    canProceed 
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200' 
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                }`}
+                            >
+                                下一步：选择新床位 <ArrowRight size={16} />
+                            </button>
                         </div>
                     )}
 
